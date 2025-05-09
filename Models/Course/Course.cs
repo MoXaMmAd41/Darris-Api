@@ -10,5 +10,9 @@
         public ICollection<CourseNoteBook> Notebooks { get; set; }
         public ICollection<CourseTestBank> TestBanks { get; set; }
         public ICollection<CourseExplanation> YouTubeVideos { get; set; }
+
+        public ICollection<StudentCourse> StudentCourses { get; set; }
+
+
     }
 }

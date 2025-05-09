@@ -40,7 +40,12 @@ namespace Darris_Api
             {
                 options.AddPolicy("IsStudent", policy => policy.RequireRole(UserRole.Student.ToString()));
                 options.AddPolicy("IsCollegeClub", policy => policy.RequireRole(UserRole.CollegeClub.ToString()));
+                options.AddPolicy("IsAdmin", policy => policy.RequireRole(UserRole.Admin.ToString()));
             });
+
+
+                builder.Services.Configure<EmailSettings>(
+             builder.Configuration.GetSection("EmailSettings"));
 
             builder.Services.AddSwaggerGen(c =>
             {
@@ -79,7 +84,7 @@ namespace Darris_Api
             });
 
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            //builder.Services.AddSwaggerGen();
 
 
             var app = builder.Build();
@@ -93,8 +98,8 @@ namespace Darris_Api
 
             app.UseHttpsRedirection();
 
-            app.UseAuthorization();
             app.UseAuthentication();
+            app.UseAuthorization(); 
 
             app.MapControllers();
 

@@ -15,6 +15,8 @@ using System.Text;
 using Darris_Api.Roles;
 using Microsoft.AspNetCore.Authorization;
 using Darris_Api.Models.Course;
+using Darris_Api.Migrations;
+using Microsoft.Extensions.Options;
 
 
 namespace Darris_Api.Controllers
@@ -26,61 +28,117 @@ namespace Darris_Api.Controllers
     {
         private readonly DarrisDbContext _db;
         private readonly IEmailSender _emailSender;
+        private readonly EmailSettings _emailSettings;
 
-        public DarrisController(DarrisDbContext db, IEmailSender emailSender)
+        public DarrisController(DarrisDbContext db, IEmailSender emailSender, IOptions<EmailSettings> emailSettings)
         {
             _db = db;
             _emailSender = emailSender;
+            _emailSettings = emailSettings.Value;
         }
 
 
 
 
 
-        [HttpPost("Create account")]
-        public async Task<ActionResult<UserInformationDto>> CreateAccount(UserInformationDto userInformationDto)
+        [HttpPost("create-account")]
+        public async Task<ActionResult<string>> CreateAccount(UserInformationDto userInformationDto)
         {
             if (userInformationDto == null)
-            {
                 return BadRequest();
-            }
 
             if (await _db.UserInfo.AnyAsync(u => u.Email.ToLower() == userInformationDto.Email.ToLower()))
             {
-                ModelState.AddModelError("", "User Already Exist");
+                ModelState.AddModelError("", "User already exists");
                 return BadRequest();
             }
 
-            var UserInform = userInformationDto.Adapt<UserInformation>();
-            UserInform.Password = PasswordHelper.HashPassword(UserInform.Password);
-            UserInform.Role = UserRole.Student;
-            await _db.AddAsync(UserInform);
+            var user = userInformationDto.Adapt<UserInformation>();
+            user.Password = PasswordHelper.HashPassword(user.Password);
+            user.Role = UserRole.Student;
+            user.IsEmailVerified = false;
+
+            var code = new Random().Next(100000, 999999).ToString();
+            user.EmailVerificationCode = code;
+            user.EmailVerificationCodeExpiration = DateTime.UtcNow.AddMinutes(10);
+
+            await _db.AddAsync(user);
             await _db.SaveChangesAsync();
-            string subject = "welcome to darris";
+
+            string subject = "Verify Your Email - Darris";
             string message = $@"
-            <h2>Hi {UserInform.FirstName},</h2>
+            <h2>Hi {user.FirstName},</h2>
             <p>Thank you for registering on <strong>Darris</strong>.</p>
-            <p>Start browsing courses and student reviews now!</p>
+            <p>Your verification code is:</p>
+            <h3>{code}</h3>
+            <p>This code expires in 10 minutes.</p>
             <br />
             <p>- The Darris Team</p>";
 
-            await _emailSender.SendEmailAsync(UserInform.Email, subject, message);
+            await _emailSender.SendEmailAsync(user.Email, subject, message);
 
+            return Ok("Account created. Please check your email for the verification code.");
+        }
+        [HttpPost("verify-email-code")]
+        public async Task<IActionResult> VerifyEmailCode([FromBody] EmailCodeVerificationDto dto)
+        {
+            var user = await _db.UserInfo.FirstOrDefaultAsync(u =>
+                u.Email.ToLower() == dto.Email.ToLower() &&
+                u.EmailVerificationCode == dto.Code &&
+                u.EmailVerificationCodeExpiration > DateTime.UtcNow);
 
-            return Ok(UserInform);
+            if (user == null)
+                return BadRequest("Invalid or expired verification code.");
+
+            user.IsEmailVerified = true;
+            user.EmailVerificationCode = null;
+            user.EmailVerificationCodeExpiration = null;
+
+            await _db.SaveChangesAsync();
+
+            return Ok("Email verified successfully.");
         }
 
+        [HttpPost("resend-verification-code")]
+        public async Task<IActionResult> ResendVerificationCode([FromBody] ResendVerificationCodeDto dto)
+        {
+            var user = await _db.UserInfo.FirstOrDefaultAsync(u =>
+                u.Email.ToLower() == dto.Email.ToLower() && !u.IsEmailVerified);
 
+            if (user == null)
+                return BadRequest("User not found or already verified.");
+
+            var code = new Random().Next(100000, 999999).ToString();
+            user.EmailVerificationCode = code;
+            user.EmailVerificationCodeExpiration = DateTime.UtcNow.AddMinutes(10);
+            await _db.SaveChangesAsync();
+
+            string subject = "Your New Verification Code - Darris";
+            string message = $@"
+            <h2>Hi {user.FirstName},</h2>
+            <p>Here is your new email verification code:</p>
+            <h3>{code}</h3>
+            <p>This code will expire in 10 minutes.</p>
+            <br />
+            <p>- The Darris Team</p>";
+
+            await _emailSender.SendEmailAsync(user.Email, subject, message);
+
+            return Ok("A new verification code has been sent to your email.");
+        }
 
 
         [HttpPost("Login")]
         public async Task<ActionResult<UserInformationDto>> Login([FromBody] LoginDto loginDto)
         {
+
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
+
             var User = await _db.UserInfo.FirstOrDefaultAsync(u => u.Email.ToLower() == loginDto.Email.ToLower());
+
             if (User == null)
             {
                 return Unauthorized("Invalid email or password");
@@ -131,37 +189,39 @@ namespace Darris_Api.Controllers
 
 
 
-        [HttpPost("request password reset")]
+        [HttpPost("request-password-reset")]
         public async Task<IActionResult> RequestPasswordReset([FromBody] PasswordRequestResetDto passwordRequestResetDto)
         {
-            var User = await _db.UserInfo.FirstOrDefaultAsync(u => u.Email.ToLower() == passwordRequestResetDto.Email.ToLower());
-            if (User == null)
+            var user = await _db.UserInfo.FirstOrDefaultAsync(u => u.Email.ToLower() == passwordRequestResetDto.Email.ToLower());
+            if (user == null)
             {
                 return NotFound("Email not found");
             }
-            var token = GenaratePasswordResetToken(User);
-            User.PasswordResetToken = token;
-            User.PasswordResetTokenExpiration = DateTime.UtcNow.AddMinutes(10);
+
+            var code = new Random().Next(100000, 999999).ToString();
+            user.PasswordResetCode = code;
+            user.PasswordResetCodeExpiration = DateTime.UtcNow.AddMinutes(10);
             await _db.SaveChangesAsync();
-            var resetLink = $"http://localhost:5173/reset-password/{token}";
-            string subject = "Reset your password - Darris";
+
+            string subject = "Your Password Reset Code - Darris";
             string message = $@"
-        <h2>Hi {User.FirstName},</h2>
-        <p>You requested to reset your password.</p>
-        <p><a href='{resetLink}'>Click here to reset it</a>. This link will expire in 30 minutes.</p>
-        <br />
-        <p>- Darris Team</p>";
+            <h2>Hi {user.FirstName},</h2>
+            <p>You requested to reset your password.</p>
+            <p>Use the following code to reset your password (valid for 10 minutes):</p>
+            <h3>{code}</h3>
+            <p>If you didn't request this, please ignore it.</p>
+            <br />
+            <p>- Darris Team</p>";
 
-            await _emailSender.SendEmailAsync(User.Email, subject, message);
+            await _emailSender.SendEmailAsync(user.Email, subject, message);
 
-            return Ok("Reset link sent to your email.");
-
+            return Ok("Verification code sent to your email.");
         }
 
 
 
 
-        private string GenaratePasswordResetToken(UserInformation user)
+       /* private string GenaratePasswordResetToken(UserInformation user)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("MySuperSecureAndRandomKeyThatlooksJustAwesomeAndNeedsVeryLong"));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -177,25 +237,29 @@ namespace Darris_Api.Controllers
                 );
             return new JwtSecurityTokenHandler().WriteToken(Token);
         }
+       */
 
 
 
 
-
-        [HttpPost("Reset Password")]
+        [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] PasswordResetDto passwordResetDto)
         {
-            var user = await _db.UserInfo.FirstOrDefaultAsync(u => u.Email.ToLower() ==
-            passwordResetDto.Email.ToLower() && u.PasswordResetToken == passwordResetDto.Token &&
-            u.PasswordResetTokenExpiration > DateTime.UtcNow);
+            var user = await _db.UserInfo.FirstOrDefaultAsync(u =>
+                u.Email.ToLower() == passwordResetDto.Email.ToLower() &&
+                u.PasswordResetCode == passwordResetDto.Code &&
+                u.PasswordResetCodeExpiration > DateTime.UtcNow);
+
             if (user == null)
             {
-                return BadRequest("invalid");
+                return BadRequest("Invalid or expired code.");
             }
+
             user.Password = PasswordHelper.HashPassword(passwordResetDto.NewPassword);
-            user.PasswordResetToken = null;
-            user.PasswordResetTokenExpiration = null;
+            user.PasswordResetCode = null;
+            user.PasswordResetCodeExpiration = null;
             await _db.SaveChangesAsync();
+
             return Ok("Password has been reset successfully.");
         }
 
@@ -229,6 +293,7 @@ namespace Darris_Api.Controllers
             {
                 return NotFound("student not found");
             }
+
             var joinRequest = new CollageClubJoinReq
             {
                 FirstName = collageClubJoinReqDto.FirstName,
@@ -237,20 +302,25 @@ namespace Darris_Api.Controllers
                 Status = JoinCollageClubReqStatus.Pending,
                 StudentId = student.Id
             };
+
             await _db.CollegeClubJoinRequests.AddAsync(joinRequest);
             await _db.SaveChangesAsync();
+
+            string acceptLink = $"https://localhost:7168/api/collegeclub/handle-request?id={joinRequest.Id}&action=accept";
+            string rejectLink = $"https://localhost:7168/api/collegeclub/handle-request?id={joinRequest.Id}&action=reject";
+
             string subject = "New Join Request from " + collageClubJoinReqDto.FirstName;
             string message = $@"
                 <h2>New Join Request</h2>
-                 <p>Student: {collageClubJoinReqDto.FirstName} {collageClubJoinReqDto.LastName}</p>
-                 <p>GPA: {collageClubJoinReqDto.GPA}</p>
-                    <p>Status: Pending</p>";
-            await _emailSender.SendEmailAsync(joinRequest.Student.Email, subject, message);
+                <p>Student: {collageClubJoinReqDto.FirstName} {collageClubJoinReqDto.LastName}</p>
+                <p>GPA: {collageClubJoinReqDto.GPA}</p>
+                <p>Status: Pending</p>
+                <p><a href='{acceptLink}'>Accept</a> | <a href='{rejectLink}'>Reject</a></p>";
+
+            await _emailSender.SendEmailAsync(_emailSettings.AdminEmail,subject,message);
+
             return Ok("Your request has been sent to the admin for review.");
-
         }
-
-
 
 
         [Authorize(Roles = "Admin")]
@@ -296,14 +366,14 @@ namespace Darris_Api.Controllers
 
 
 
-        [HttpGet]
+        [HttpGet("GetCourses")]
         public async Task<ActionResult<IEnumerable<Course>>> GetCourses()
         {
             return await _db.Courses.ToListAsync();
         }
 
 
-
+        [HttpGet("GetCourse/{id}")]
         public async Task<ActionResult<Course>> GetCourse(int id)
         {
             var course = await _db.Courses
@@ -320,7 +390,8 @@ namespace Darris_Api.Controllers
 
             return Ok(course);
         }
-        [HttpPost]
+
+        [HttpPost("CreateCourse")]
         public async Task<ActionResult> CreateCourse(CourseDto coursedto)
         {
             if (coursedto == null)
@@ -347,7 +418,7 @@ namespace Darris_Api.Controllers
             return Ok("Course created successfully.");
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("DeleteCourse/{id}")]
         public async Task<IActionResult> DeleteCourse(int id)
         {
             var course = await _db.Courses.FindAsync(id);
@@ -361,8 +432,141 @@ namespace Darris_Api.Controllers
         }
 
 
-    }
+        [HttpPost("{courseId}/book")]
+        public async Task<IActionResult> AddCourseBook(int courseId, CourseBook book)
+        {
+            book.CourseId = courseId;
+            _db.CourseBooks.Add(book);
+            await _db.SaveChangesAsync();
+            return Ok(book);
+        }
 
+        [HttpGet("{courseId}/book")]
+        public async Task<ActionResult<CourseBook>> GetCourseBook(int courseId)
+        {
+            var book = await _db.CourseBooks.FirstOrDefaultAsync(b => b.CourseId == courseId);
+            if (book == null)
+            {
+                return NotFound("book does not exist");
+            }
+            return Ok(book);
+        }
+
+        [HttpGet("{courseId}/notebooks")]
+        public async Task<ActionResult<IEnumerable<CourseNoteBook>>> GetNotebooks(int courseId)
+        {
+            var notebooks = await _db.CourseNotebooks.Where(n => n.CourseId == courseId).ToListAsync();
+            return Ok(notebooks);
+        }
+
+        [HttpPost("{courseId}/NoteBooks")]
+        public async Task<IActionResult> AddNotebook(int courseId, CourseNoteBook notebook)
+        {
+            notebook.CourseId = courseId;
+            _db.CourseNotebooks.Add(notebook);
+            await _db.SaveChangesAsync();
+            return Ok(notebook);
+        }
+
+        [HttpGet("{courseId}/slides")]
+        public async Task<ActionResult<IEnumerable<CourseSlide>>> GetSlides(int courseId)
+        {
+            var slides = await _db.CourseSlides.Where(s => s.CourseId == courseId).ToListAsync();
+            return Ok(slides);
+        }
+
+        [HttpPost("{courseId}/slides")]
+        public async Task<IActionResult> AddSlide(int courseId, CourseSlide slide)
+        {
+            slide.CourseId = courseId;
+            _db.CourseSlides.Add(slide);
+            await _db.SaveChangesAsync();
+            return Ok(slide);
+        }
+
+        [HttpGet("{courseId}/videos")]
+        public async Task<ActionResult<IEnumerable<CourseExplanation>>> GetVideos(int courseId)
+        {
+            var videos = await _db.CourseExplanation.Where(v => v.CourseId == courseId).ToListAsync();
+            return Ok(videos);
+        }
+
+        [HttpPost("{courseId}/videos")]
+        public async Task<IActionResult> AddVideo(int courseId, CourseExplanation video)
+        {
+            video.CourseId = courseId;
+            _db.CourseExplanation.Add(video);
+            await _db.SaveChangesAsync();
+            return Ok(video);
+        }
+
+        [HttpGet("{courseId}/testbanks")]
+        public async Task<ActionResult<IEnumerable<CourseTestBank>>> GetTestBanks(int courseId)
+        {
+            var testBanks = await _db.CourseTestBank.Where(t => t.CourseId == courseId).ToListAsync();
+            return Ok(testBanks);
+        }
+
+        [HttpPost("{courseId}/testbanks")]
+        public async Task<IActionResult> AddTestBank(int courseId, CourseTestBank testBank)
+        {
+            testBank.CourseId = courseId;
+            _db.CourseTestBank.Add(testBank);
+            await _db.SaveChangesAsync();
+            return Ok(testBank);
+        }
+
+
+        [HttpPut("update-status/{userId}/{courseId}")]
+        public async Task<IActionResult> UpdateCourseStatus(int userId, int courseId, CourseStatus newStatus)
+        {
+            var studentCourse = await _db.StudentCourses
+                .FirstOrDefaultAsync(sc => sc.Id == userId && sc.CourseId == courseId);
+
+            if (studentCourse == null)
+            {
+                return NotFound("Student-course relationship not found.");
+            }
+
+            studentCourse.Status = newStatus;
+            await _db.SaveChangesAsync();
+
+            return Ok("Course status updated successfully.");
+        }
+
+
+        [HttpGet("SearchBar")]
+        public async Task<ActionResult<IEnumerable<Course>>> SearchCourses([FromQuery] string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return BadRequest("Search query is required.");
+            }
+            var courses = await _db.Courses.Where(c => c.CourseName.ToLower().Contains(query.Trim().ToLower())).ToListAsync();
+            return Ok(courses);
+        }
+
+
+
+
+        [HttpPost("course/{id}/{courseId}/advice")]
+        public async Task<IActionResult> SubmitAdvice(int id, int courseId, [FromBody] string advice)
+        {
+            var course = await _db.StudentCourses.FindAsync(id, courseId); 
+
+            if (course == null)
+                return NotFound("Course not found");
+
+            if (course.Status != CourseStatus.Completed)
+                return BadRequest("You can only submit advice after completing the course.");
+
+            course.StudentAdvice = advice;
+            await _db.SaveChangesAsync();
+
+            return Ok("Advice submitted successfully");
+
+        }
+    }
 }
 
 

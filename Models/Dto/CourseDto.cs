@@ -6,5 +6,6 @@ namespace Darris_Api.Models.Dto
     {
         [Required]
         public string CourseName { get; set; }
+        public string? StudentAdvice { get; set; }
     }
 }

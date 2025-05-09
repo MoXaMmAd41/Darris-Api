@@ -4,6 +4,7 @@ using Darris_Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Darris_Api.Migrations
 {
     [DbContext(typeof(DarrisDbContext))]
-    partial class DarrisDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250508191929_verify_link")]
+    partial class verify_link
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -213,9 +216,6 @@ namespace Darris_Api.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<string>("StudentAdvice")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Id", "CourseId");
 
                     b.HasIndex("CourseId");
@@ -235,11 +235,8 @@ namespace Darris_Api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("EmailVerificationCode")
+                    b.Property<string>("EmailVerificationToken")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("EmailVerificationCodeExpiration")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
@@ -255,12 +252,6 @@ namespace Darris_Api.Migrations
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("PasswordResetCode")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("PasswordResetCodeExpiration")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("PasswordResetToken")
                         .HasColumnType("nvarchar(max)");

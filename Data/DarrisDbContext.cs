@@ -16,9 +16,28 @@
         public DbSet<CourseSlide> CourseSlides { get; set; }
         public DbSet<CourseNoteBook> CourseNotebooks { get; set; }
         public DbSet<CourseExplanation> CourseExplanation { get; set; }
+        public DbSet<CourseTestBank> CourseTestBank { get; set; }
         public DbSet<CollageClubJoinReq> CollegeClubJoinRequests { get; set; }
+        public DbSet<StudentCourse> StudentCourses { get; set; }
+
+
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<StudentCourse>()
+                .HasKey(sc => new { sc.Id, sc.CourseId });
+
+            modelBuilder.Entity<StudentCourse>()
+                .HasOne(sc => sc.User)
+                .WithMany(u => u.StudentCourses)
+                .HasForeignKey(sc => sc.Id);
+
+            modelBuilder.Entity<StudentCourse>()
+                .HasOne(sc => sc.Course)
+                .WithMany(c => c.StudentCourses)
+                .HasForeignKey(sc => sc.CourseId);
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<UserInformation>().HasData(
                 new UserInformation
