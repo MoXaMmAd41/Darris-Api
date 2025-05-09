@@ -121,6 +121,8 @@ namespace Darris_Api.Controllers
             <p>This code will expire in 10 minutes.</p>
             <br />
             <p>- The Darris Team</p>";
+            
+
 
             await _emailSender.SendEmailAsync(user.Email, subject, message);
 
