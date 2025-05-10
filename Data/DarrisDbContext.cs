@@ -19,20 +19,37 @@
         public DbSet<CourseTestBank> CourseTestBank { get; set; }
         public DbSet<CollageClubJoinReq> CollegeClubJoinRequests { get; set; }
         public DbSet<StudentCourse> StudentCourses { get; set; }
+        public DbSet<Major> Majors { get; set; }
+        public DbSet<CourseMajor> CourseMajors { get; set; }
 
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            modelBuilder.Entity<CourseMajor>()
+          .HasKey(cm => new { cm.CourseId, cm.MajorId });
+
+            modelBuilder.Entity<CourseMajor>()
+                .HasOne(cm => cm.Course)
+                .WithMany(c => c.CourseMajors)
+                .HasForeignKey(cm => cm.CourseId);
+
+            modelBuilder.Entity<CourseMajor>()
+                .HasOne(cm => cm.Major)
+                .WithMany(m => m.CourseMajors)
+                .HasForeignKey(cm => cm.MajorId);
+
+
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<StudentCourse>()
-                .HasKey(sc => new { sc.Id, sc.CourseId });
+                .HasKey(sc => new { sc.UserId, sc.CourseId });
 
             modelBuilder.Entity<StudentCourse>()
                 .HasOne(sc => sc.User)
                 .WithMany(u => u.StudentCourses)
-                .HasForeignKey(sc => sc.Id);
+                .HasForeignKey(sc => sc.UserId);
 
             modelBuilder.Entity<StudentCourse>()
                 .HasOne(sc => sc.Course)

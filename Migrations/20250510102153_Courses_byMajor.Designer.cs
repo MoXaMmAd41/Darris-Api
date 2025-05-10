@@ -4,6 +4,7 @@ using Darris_Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Darris_Api.Migrations
 {
     [DbContext(typeof(DarrisDbContext))]
-    partial class DarrisDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250510102153_Courses_byMajor")]
+    partial class Courses_byMajor
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -225,7 +228,7 @@ namespace Darris_Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MajorId"));
 
-                    b.Property<string>("MajorName")
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -236,7 +239,7 @@ namespace Darris_Api.Migrations
 
             modelBuilder.Entity("Darris_Api.Models.Course.StudentCourse", b =>
                 {
-                    b.Property<int>("UserId")
+                    b.Property<int>("Id")
                         .HasColumnType("int");
 
                     b.Property<int>("CourseId")
@@ -248,7 +251,7 @@ namespace Darris_Api.Migrations
                     b.Property<string>("StudentAdvice")
                         .HasColumnType("nvarchar(max)");
 
-                    b.HasKey("UserId", "CourseId");
+                    b.HasKey("Id", "CourseId");
 
                     b.HasIndex("CourseId");
 
@@ -422,7 +425,7 @@ namespace Darris_Api.Migrations
 
                     b.HasOne("Darris_Api.Models.UserInformation", "User")
                         .WithMany("StudentCourses")
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

@@ -7,5 +7,6 @@ namespace Darris_Api.Models.Dto
         [Required]
         public string CourseName { get; set; }
         public string? StudentAdvice { get; set; }
+        public List<int> MajorIds { get; set; }
     }
 }
