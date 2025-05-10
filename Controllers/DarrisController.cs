@@ -23,6 +23,7 @@ namespace Darris_Api.Controllers
 {
     [ApiController]
     [Route("api/Darris_Api")]
+    [Authorize]
 
     public class DarrisController : ControllerBase
     {
@@ -40,7 +41,7 @@ namespace Darris_Api.Controllers
 
 
 
-
+        [AllowAnonymous]
         [HttpPost("create-account")]
         public async Task<ActionResult<string>> CreateAccount(UserInformationDto userInformationDto)
         {
@@ -79,6 +80,7 @@ namespace Darris_Api.Controllers
 
             return Ok("Account created. Please check your email for the verification code.");
         }
+        [AllowAnonymous]
         [HttpPost("verify-email-code")]
         public async Task<IActionResult> VerifyEmailCode([FromBody] EmailCodeVerificationDto dto)
         {
@@ -99,6 +101,7 @@ namespace Darris_Api.Controllers
             return Ok("Email verified successfully.");
         }
 
+        [AllowAnonymous]
         [HttpPost("resend-verification-code")]
         public async Task<IActionResult> ResendVerificationCode([FromBody] ResendVerificationCodeDto dto)
         {
@@ -129,7 +132,7 @@ namespace Darris_Api.Controllers
             return Ok("A new verification code has been sent to your email.");
         }
 
-
+        [AllowAnonymous]
         [HttpPost("Login")]
         public async Task<ActionResult<UserInformationDto>> Login([FromBody] LoginDto loginDto)
         {
@@ -190,7 +193,7 @@ namespace Darris_Api.Controllers
 
 
 
-
+        [AllowAnonymous]
         [HttpPost("request-password-reset")]
         public async Task<IActionResult> RequestPasswordReset([FromBody] PasswordRequestResetDto passwordRequestResetDto)
         {
@@ -223,27 +226,27 @@ namespace Darris_Api.Controllers
 
 
 
-       /* private string GenaratePasswordResetToken(UserInformation user)
-        {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("MySuperSecureAndRandomKeyThatlooksJustAwesomeAndNeedsVeryLong"));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-            var claims = new List<Claim>
-            {
-                new Claim("Email",user.Email),
-                new Claim("UserId",user.Id.ToString())
-            };
-            var Token = new JwtSecurityToken(
-                claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(10),
-                signingCredentials: creds
-                );
-            return new JwtSecurityTokenHandler().WriteToken(Token);
-        }
-       */
+        /* private string GenaratePasswordResetToken(UserInformation user)
+         {
+             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("MySuperSecureAndRandomKeyThatlooksJustAwesomeAndNeedsVeryLong"));
+             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+             var claims = new List<Claim>
+             {
+                 new Claim("Email",user.Email),
+                 new Claim("UserId",user.Id.ToString())
+             };
+             var Token = new JwtSecurityToken(
+                 claims: claims,
+                 expires: DateTime.UtcNow.AddMinutes(10),
+                 signingCredentials: creds
+                 );
+             return new JwtSecurityTokenHandler().WriteToken(Token);
+         }
+        */
 
 
 
-
+        [AllowAnonymous]
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] PasswordResetDto passwordResetDto)
         {
@@ -371,9 +374,27 @@ namespace Darris_Api.Controllers
         [HttpGet("GetCourses")]
         public async Task<ActionResult<IEnumerable<Course>>> GetCourses()
         {
-            return await _db.Courses.ToListAsync();
+            var courses = await _db.Courses
+                .Include(c => c.CourseMajors)
+                .ThenInclude(cm => cm.Major)
+                .ToListAsync();
+
+            return Ok(courses);
         }
 
+
+
+        [HttpGet("GetCoursesByMajor/{majorId}")]
+        public async Task<ActionResult<IEnumerable<Course>>> GetCoursesByMajor(int majorId)
+        {
+            var courses = await _db.Courses
+                .Where(c => c.CourseMajors.Any(cm => cm.MajorId == majorId))
+                .Include(c => c.CourseMajors)
+                    .ThenInclude(cm => cm.Major)
+                .ToListAsync();
+
+            return Ok(courses);
+        }
 
         [HttpGet("GetCourse/{id}")]
         public async Task<ActionResult<Course>> GetCourse(int id)
@@ -384,7 +405,10 @@ namespace Darris_Api.Controllers
                 .Include(c => c.Notebooks)
                 .Include(c => c.TestBanks)
                 .Include(c => c.YouTubeVideos)
+                .Include(c => c.CourseMajors)
+                .ThenInclude(cm => cm.Major)
                 .FirstOrDefaultAsync(c => c.CourseId == id);
+
             if (course == null)
             {
                 return NotFound("course not found");
@@ -396,9 +420,9 @@ namespace Darris_Api.Controllers
         [HttpPost("CreateCourse")]
         public async Task<ActionResult> CreateCourse(CourseDto coursedto)
         {
-            if (coursedto == null)
+            if (coursedto == null || coursedto.MajorIds == null || !coursedto.MajorIds.Any())
             {
-                return BadRequest("Invalid course data.");
+                return BadRequest("Invalid course data or majors not provided.");
             }
 
             bool courseExists = await _db.Courses
@@ -411,7 +435,8 @@ namespace Darris_Api.Controllers
 
             var course = new Course
             {
-                CourseName = coursedto.CourseName.Trim()
+                CourseName = coursedto.CourseName.Trim(),
+                CourseMajors = coursedto.MajorIds.Select(mid => new CourseMajor { MajorId = mid }).ToList()
             };
 
             _db.Courses.Add(course);
@@ -420,7 +445,8 @@ namespace Darris_Api.Controllers
             return Ok("Course created successfully.");
         }
 
-        [HttpDelete("DeleteCourse/{id}")]
+
+            [HttpDelete("DeleteCourse/{id}")]
         public async Task<IActionResult> DeleteCourse(int id)
         {
             var course = await _db.Courses.FindAsync(id);
@@ -443,6 +469,8 @@ namespace Darris_Api.Controllers
             return Ok(book);
         }
 
+
+
         [HttpGet("{courseId}/book")]
         public async Task<ActionResult<CourseBook>> GetCourseBook(int courseId)
         {
@@ -454,12 +482,16 @@ namespace Darris_Api.Controllers
             return Ok(book);
         }
 
+
+
         [HttpGet("{courseId}/notebooks")]
         public async Task<ActionResult<IEnumerable<CourseNoteBook>>> GetNotebooks(int courseId)
         {
             var notebooks = await _db.CourseNotebooks.Where(n => n.CourseId == courseId).ToListAsync();
             return Ok(notebooks);
         }
+
+
 
         [HttpPost("{courseId}/NoteBooks")]
         public async Task<IActionResult> AddNotebook(int courseId, CourseNoteBook notebook)
@@ -469,6 +501,8 @@ namespace Darris_Api.Controllers
             await _db.SaveChangesAsync();
             return Ok(notebook);
         }
+
+
 
         [HttpGet("{courseId}/slides")]
         public async Task<ActionResult<IEnumerable<CourseSlide>>> GetSlides(int courseId)
@@ -523,7 +557,7 @@ namespace Darris_Api.Controllers
         public async Task<IActionResult> UpdateCourseStatus(int userId, int courseId, CourseStatus newStatus)
         {
             var studentCourse = await _db.StudentCourses
-                .FirstOrDefaultAsync(sc => sc.Id == userId && sc.CourseId == courseId);
+                .FirstOrDefaultAsync(sc => sc.UserId == userId && sc.CourseId == courseId);
 
             if (studentCourse == null)
             {
@@ -551,7 +585,7 @@ namespace Darris_Api.Controllers
 
 
 
-        [HttpPost("course/{id}/{courseId}/advice")]
+        [HttpPost("course/advice/{id}/{courseId}")]
         public async Task<IActionResult> SubmitAdvice(int id, int courseId, [FromBody] string advice)
         {
             var course = await _db.StudentCourses.FindAsync(id, courseId); 

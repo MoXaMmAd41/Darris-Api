@@ -13,6 +13,6 @@
 
         public ICollection<StudentCourse> StudentCourses { get; set; }
 
-
+        public ICollection<CourseMajor> CourseMajors { get; set; }
     }
 }
