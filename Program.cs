@@ -25,8 +25,8 @@ namespace Darris_Api
               {
                   option.TokenValidationParameters = new TokenValidationParameters
                   {
-                      ValidateIssuer = true,
-                      ValidateAudience = true,
+                      ValidateIssuer = false,
+                      ValidateAudience = false,
                       ValidateLifetime = true,
                       ValidIssuer = builder.Configuration["AppSettings:Issuer"],
                       ValidAudience = builder.Configuration["AppSettings:Audience"],
