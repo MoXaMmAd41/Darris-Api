@@ -21,7 +21,7 @@ using Microsoft.Extensions.Options;
 
 namespace Darris_Api.Controllers
 {
-    
+
     [ApiController]
     [Route("api/Darris_Api")]
 
@@ -91,7 +91,7 @@ namespace Darris_Api.Controllers
                 <p>Status: Pending</p>
                 <p><a href='{acceptLink}'>Accept</a> | <a href='{rejectLink}'>Reject</a></p>";
 
-            await _emailSender.SendEmailAsync(_emailSettings.AdminEmail,subject,message);
+            await _emailSender.SendEmailAsync(_emailSettings.AdminEmail, subject, message);
 
             return Ok("Your request has been sent to the admin for review.");
         }
@@ -138,23 +138,26 @@ namespace Darris_Api.Controllers
 
         }
 
-
-        [Authorize]
+        //================================
+      //  [Authorize]
         [HttpGet("GetCourses")]
-        public async Task<ActionResult<IEnumerable<Course>>> GetCourses()
+        public async Task<ActionResult<IEnumerable<CourseDto>>> GetCourses()
         {
             var courses = await _db.Courses
                 .Include(c => c.CourseMajors)
                 .ThenInclude(cm => cm.Major)
                 .ToListAsync();
 
-            return Ok(courses);
+            var courseDto = courses.Adapt<IEnumerable<CourseDto>>();
+
+            return Ok(courseDto);
         }
 
-
+        [Authorize]
         [HttpGet("GetCourse/{id}")]
-        public async Task<ActionResult<Course>> GetCourse(int id)
+        public async Task<ActionResult<CourseDto>> GetCourse(int id)
         {
+
             var course = await _db.Courses
                 .Include(c => c.Book)
                 .Include(c => c.Slides)
@@ -170,12 +173,13 @@ namespace Darris_Api.Controllers
                 return NotFound("course not found");
             }
 
-            return Ok(course);
+            var courseDto = course.Adapt<CourseDto>();
+            return Ok(courseDto);
         }
 
         [Authorize(Roles = "CollegeClub")]
         [HttpPost("CreateCourse")]
-        public async Task<ActionResult> CreateCourse(CourseDto coursedto)
+        public async Task<ActionResult> CreateCourse(CourseCreateDto coursedto)
         {
             if (coursedto == null || coursedto.MajorIds == null || !coursedto.MajorIds.Any())
             {
@@ -202,6 +206,7 @@ namespace Darris_Api.Controllers
             return Ok("Course created successfully.");
         }
 
+        [Authorize(Roles = "CollegeClub")]
         [HttpDelete("DeleteCourse/{id}")]
         public async Task<IActionResult> DeleteCourse(int id)
         {
@@ -215,16 +220,25 @@ namespace Darris_Api.Controllers
             return NoContent();
         }
 
-        [Authorize(Roles = "CollegeClub")]
+        // [Authorize(Roles = "CollegeClub")]
         [HttpPost("{courseId}/book")]
-        public async Task<IActionResult> AddCourseBook(int courseId, CourseBook book)
+        public async Task<IActionResult> AddCourseBook(int courseId, CourseBookDto dto)
         {
-            book.CourseId = courseId;
+            var book = new CourseBook
+            {
+                CourseId = courseId,
+                FileUrl = dto.FileUrl
+            };
+
             _db.CourseBooks.Add(book);
             await _db.SaveChangesAsync();
+
             return Ok(book);
         }
+        
+            
 
+            [Authorize]
         [HttpGet("{courseId}/book")]
         public async Task<ActionResult<CourseBook>> GetCourseBook(int courseId)
         {
@@ -236,6 +250,8 @@ namespace Darris_Api.Controllers
             return Ok(book);
         }
 
+
+        [Authorize]
         [HttpGet("{courseId}/notebooks")]
         public async Task<ActionResult<IEnumerable<CourseNoteBook>>> GetNotebooks(int courseId)
         {
@@ -243,15 +259,23 @@ namespace Darris_Api.Controllers
             return Ok(notebooks);
         }
 
-        [HttpPost("{courseId}/NoteBooks")]
-        public async Task<IActionResult> AddNotebook(int courseId, CourseNoteBook notebook)
+        [HttpPost("{courseId}/notebook")]
+        public async Task<IActionResult> AddCourseNotebook(int courseId, NoteBookDto noteBookDto)
         {
-            notebook.CourseId = courseId;
+            var notebook = new CourseNoteBook
+            {
+                CourseId = courseId,
+                FileUrl = noteBookDto.FileUrl
+            };
+
             _db.CourseNotebooks.Add(notebook);
             await _db.SaveChangesAsync();
+
             return Ok(notebook);
         }
 
+
+        [Authorize]
         [HttpGet("{courseId}/slides")]
         public async Task<ActionResult<IEnumerable<CourseSlide>>> GetSlides(int courseId)
         {
@@ -262,12 +286,18 @@ namespace Darris_Api.Controllers
 
 
         [Authorize(Roles = "CollegeClub")]
-        [HttpPost("{courseId}/slides")]
-        public async Task<IActionResult> AddSlide(int courseId, CourseSlide slide)
+        [HttpPost("{courseId}/slide")]
+        public async Task<IActionResult> AddCourseSlide(int courseId, SlidesDto slidesDto)
         {
-            slide.CourseId = courseId;
+            var slide = new CourseSlide
+            {
+                CourseId = courseId,
+                FileUrl = slidesDto.FileUrl
+            };
+
             _db.CourseSlides.Add(slide);
             await _db.SaveChangesAsync();
+
             return Ok(slide);
         }
 
@@ -283,12 +313,18 @@ namespace Darris_Api.Controllers
 
 
         [Authorize(Roles = "CollegeClub")]
-        [HttpPost("{courseId}/videos")]
-        public async Task<IActionResult> AddVideo(int courseId, CourseExplanation video)
+        [HttpPost("{courseId}/youtube")]
+        public async Task<IActionResult> AddYouTubeVideo(int courseId, YouToubeDto youToubeDto)
         {
-            video.CourseId = courseId;
+            var video = new CourseExplanation
+            {
+                CourseId = courseId,
+                Url = youToubeDto.Url
+            };
+
             _db.CourseExplanation.Add(video);
             await _db.SaveChangesAsync();
+
             return Ok(video);
         }
 
@@ -305,12 +341,18 @@ namespace Darris_Api.Controllers
 
 
         [Authorize(Roles = "CollegeClub")]
-        [HttpPost("{courseId}/testbanks")]
-        public async Task<IActionResult> AddTestBank(int courseId, CourseTestBank testBank)
+        [HttpPost("{courseId}/testbank")]
+        public async Task<IActionResult> AddCourseTestBank(int courseId, TestBankDto testBankDto)
         {
-            testBank.CourseId = courseId;
+            var testBank = new CourseTestBank
+            {
+                CourseId = courseId,
+                FileUrl = testBankDto.FileUrl
+            };
+
             _db.CourseTestBank.Add(testBank);
             await _db.SaveChangesAsync();
+
             return Ok(testBank);
         }
 
@@ -346,7 +388,7 @@ namespace Darris_Api.Controllers
 
 
 
-
+        [Authorize]
         [HttpPost("course/{id}/{courseId}/advice")]
         public async Task<IActionResult> SubmitAdvice(int id, int courseId, [FromBody] string advice)
         {
