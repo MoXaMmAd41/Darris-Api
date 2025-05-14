@@ -1,4 +1,3 @@
-
 using Darris_Api.Data;
 using Darris_Api.Email_Config;
 using Darris_Api.Roles;
@@ -17,24 +16,22 @@ namespace Darris_Api
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
-
             builder.Services.AddControllers();
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-              .AddJwtBearer(option =>
-              {
-                  option.TokenValidationParameters = new TokenValidationParameters
-                  {
-                      ValidateIssuer = false,
-                      ValidateAudience = false,
-                      ValidateLifetime = true,
-                      ValidIssuer = builder.Configuration["AppSettings:Issuer"],
-                      ValidAudience = builder.Configuration["AppSettings:Audience"],
-                      IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["AppSettings:Token"]!)),
-                      ValidateIssuerSigningKey = true
 
-                  };
-              });
+            builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(option =>
+                {
+                    option.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = false,
+                        ValidateAudience = false,
+                        ValidateLifetime = true,
+                        ValidIssuer = builder.Configuration["AppSettings:Issuer"],
+                        ValidAudience = builder.Configuration["AppSettings:Audience"],
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["AppSettings:Token"]!)),
+                        ValidateIssuerSigningKey = true
+                    };
+                });
 
             builder.Services.AddAuthorization(options =>
             {
@@ -43,9 +40,15 @@ namespace Darris_Api
                 options.AddPolicy("IsAdmin", policy => policy.RequireRole(UserRole.Admin.ToString()));
             });
 
+            builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+            builder.Services.AddTransient<IEmailSender, EmailSender>();
 
-                builder.Services.Configure<EmailSettings>(
-             builder.Configuration.GetSection("EmailSettings"));
+            builder.Services.AddDbContext<DarrisDbContext>(options =>
+            {
+                options.UseSqlServer(builder.Configuration.GetConnectionString("DefultSQLconnections"));
+            });
+
+            builder.Services.AddEndpointsApiExplorer();
 
             builder.Services.AddSwaggerGen(c =>
             {
@@ -59,37 +62,27 @@ namespace Darris_Api
                     Type = SecuritySchemeType.Http,
                     Scheme = "Bearer"
                 });
+
                 c.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
-                     {
+                    {
                         new OpenApiSecurityScheme
                         {
                             Reference = new OpenApiReference
-                                {
-                                    Type = ReferenceType.SecurityScheme,
-                                    Id = "Bearer"
-                                }               
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
                         },
-                    new string[] {}
-                     }       
+                        new string[] {}
+                    }
                 });
             });
 
-            builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
-            builder.Services.AddTransient<IEmailSender, EmailSender>();
-
-            builder.Services.AddDbContext<DarrisDbContext>(options =>
-            {
-                options.UseSqlServer(builder.Configuration.GetConnectionString("DefultSQLconnections"));
-            });
-
-            builder.Services.AddEndpointsApiExplorer();
-            //builder.Services.AddSwaggerGen();
-
-
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
+
+  
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
@@ -99,9 +92,14 @@ namespace Darris_Api
             app.UseHttpsRedirection();
 
             app.UseAuthentication();
-            app.UseAuthorization(); 
+            app.UseAuthorization();
 
             app.MapControllers();
+            using (var scope = app.Services.CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<DarrisDbContext>();
+                DataBaseSeeder.SeedCoursesAndMajors(context);
+            }
 
             app.Run();
         }
